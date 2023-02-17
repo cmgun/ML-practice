@@ -33,5 +33,6 @@ print(X)
 # Encoding the Dependent Variable
 labelencoder_y = LabelEncoder()
 y = labelencoder_y.fit_transform(y)
+print(y)
 
 print('end')
