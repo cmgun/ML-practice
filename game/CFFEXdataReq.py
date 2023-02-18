@@ -9,7 +9,7 @@ months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'
 def download(url, filename):
     response = requests.get(url)
     if response.status_code == 200:
-        if len(response.history) > 0 & response.history[0].status_code != 200:
+        if len(response.history) > 0 :
             print(filename + '下载失败')
             return
         # 以二进制格式打开一个文件只用于写入，如果有同名filename则会覆盖重写

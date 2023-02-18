@@ -1,5 +1,7 @@
 import os
 import zipfile
+
+import numpy as np
 import pandas as pd
 
 months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
@@ -50,21 +52,23 @@ def getDelta(year, month, nextcode):
                 return None
             next_month = X['今开盘'].values
             delta = current_month - next_month
-            return delta
+            return [delta, current_month, next_month]
     return None
 
 
 # 解压数据
-for index in range(15, 24):
-    for m in range(len(months)):
-        year = '20' + str(index)
-        month = months[m]
-        filename = year + month
-        upzipFile(filename)
+# for index in range(15, 24):
+#     for m in range(len(months)):
+#         year = '20' + str(index)
+#         month = months[m]
+#         filename = year + month
+#         upzipFile(filename)
 
 # 数据清洗，取当月最后一次的本月数据，和第一次的次月数据
 deltas = []
 codes = []
+cur_m = []
+next_m = []
 for index in range(15, 24):
     for m in range(len(months)):
         year = str(index)
@@ -74,12 +78,15 @@ for index in range(15, 24):
         else:
             # 下一年的code
             nextcode = str(index + 1) + months[0]
-        delta = getDelta(year, month, nextcode)
-        if delta is None:
+        result = getDelta(year, month, nextcode)
+        if result is None:
             continue
         codes.append(year + month)
-        deltas.append(delta[0])
+        deltas.append(result[0][0])
+        cur_m.append(result[1][0])
+        next_m.append(result[2][0])
 
-output = pd.DataFrame({'time': codes, 'delta': deltas})
-output.loc[len(output.index)] = ['sum', sum(deltas)]
+
+output = pd.DataFrame({'time': codes, 'delta': deltas, 'currentMonth': cur_m, 'nextMonth': next_m})
+output.loc[len(output.index)] = ['sum', sum(deltas), np.NAN, np.NAN]
 output.to_csv(path + 'output.csv', index=False)
