@@ -1,6 +1,3 @@
-import os
-import zipfile
-
 import numpy as np
 import pandas as pd
 
@@ -8,16 +5,6 @@ months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'
 
 path = 'CFFEX/'
 
-
-def upzipFile(filename):
-    # 判断文件是否存在
-    file_path = path + filename + '.zip'
-    if not os.path.exists(file_path):
-        print(file_path + '文件不存在')
-        return
-    with zipfile.ZipFile(file_path, 'r') as zip_ref:
-        zip_ref.extractall('CFFEX/' + filename)
-        print(file_path + '解压成功')
 
 
 def getDelta(year, month, nextcode):
@@ -54,15 +41,6 @@ def getDelta(year, month, nextcode):
             delta = current_month - next_month
             return [delta, current_month, next_month]
     return None
-
-
-# 解压数据
-# for index in range(15, 24):
-#     for m in range(len(months)):
-#         year = '20' + str(index)
-#         month = months[m]
-#         filename = year + month
-#         upzipFile(filename)
 
 # 数据清洗，取当月最后一次的本月数据，和第一次的次月数据
 deltas = []
