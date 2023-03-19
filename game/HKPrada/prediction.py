@@ -13,6 +13,10 @@ from sklearn.linear_model import Lasso
 from sklearn.linear_model import ElasticNet
 
 import seaborn as sns
+import statsmodels.api as sm
+
+# Error Metrics
+from sklearn.metrics import mean_squared_error
 
 # weekly returns, using 5 business day period returns.
 return_period = 5
@@ -32,10 +36,10 @@ idx_data1 = pd.read_csv('data/HSI.csv', names = head_name)
 idx_data2 = pd.read_csv('data/VHSI.csv', names = head_name)
 X1 = np.log(idx_data1.loc[:, ('close')]).diff(return_period)
 X1 = pd.concat([idx_data1['date'], X1], axis='columns')
-X1.columns = ['date', 'lnHSI']
+X1.columns = ['date', 'HSI']
 X2 = np.log(idx_data2.loc[:, ('close')]).diff(return_period)
 X2 = pd.concat([idx_data2['date'], X2], axis='columns')
-X2.columns = ['date', 'lnVHSI']
+X2.columns = ['date', 'VHSI']
 # inner join by date
 idx_X = pd.merge(X2, X1, on='date', how='left')
 
@@ -47,7 +51,6 @@ X6 = np.log(stk_data.loc[:, ('close')]).shift(-return_period*12)
 lagged_X = pd.concat([stk_data['date'], X3, X4, X5, X6], axis='columns')
 lagged_X.columns = ['date', 'PRADA-5', 'PRADA-15', 'PRADA-30', 'PRADA-60']
 
-# todo industry component stock
 # data X7 ~ X15: relative component stocks
 x7_data = pd.read_csv('data/00590.csv', names = head_name)
 X7 = np.log(x7_data.loc[:, ['close']]).shift(-return_period)
@@ -82,19 +85,21 @@ X14 = np.log(x14_data.loc[:, ['close']]).shift(-return_period)
 X14 = pd.concat([x14_data['date'], X14], axis='columns')
 X14.columns = ['date', 'ERNESTBOREL']
 
-dataset = pd.merge(Y, idx_X, on='date', how='right')
-dataset = pd.merge(dataset, lagged_X, on='date', how='left')
-dataset = pd.merge(dataset, X7, on='date', how='left')
-dataset = pd.merge(dataset, X8, on='date', how='left')
-dataset = pd.merge(dataset, X9, on='date', how='left')
-dataset = pd.merge(dataset, X10, on='date', how='left')
-dataset = pd.merge(dataset, X11, on='date', how='left')
-dataset = pd.merge(dataset, X12, on='date', how='left')
-dataset = pd.merge(dataset, X13, on='date', how='left')
-dataset = pd.merge(dataset, X14, on='date', how='left')
+X = pd.merge(idx_X, lagged_X, on='date', how='left')
+X = pd.merge(X, X7, on='date', how='left')
+X = pd.merge(X, X8, on='date', how='left')
+X = pd.merge(X, X9, on='date', how='left')
+X = pd.merge(X, X10, on='date', how='left')
+X = pd.merge(X, X11, on='date', how='left')
+X = pd.merge(X, X12, on='date', how='left')
+X = pd.merge(X, X13, on='date', how='left')
+X = pd.merge(X, X14, on='date', how='left')
+X = X.dropna()
+
+dataset = pd.merge(Y, X, on='date', how='left')
 dataset = dataset.dropna()
 
-print(dataset)
+# print(dataset)
 
 # # Make a histogram of the DataFrame’s columns
 # dataset.hist(bins=50, sharex=False, sharey=False, xlabelsize=1, ylabelsize=1, figsize=(12,12))
@@ -112,3 +117,114 @@ print(dataset)
 
 # dataset_1 = dataset.drop(columns=['EmperorWJ', 'LukFook'])
 # print(dataset_1)
+
+# from pandas.plotting import scatter_matrix
+# pyplot.figure(figsize=(15,15))
+# scatter_matrix(dataset,figsize=(12,12))
+# pyplot.show()
+
+# import statsmodels.api as sm
+# Y['date'] = pd.to_datetime(Y['date'])
+# Y = Y.set_index('date')
+# Y = Y.dropna()
+# res = sm.tsa.seasonal_decompose(Y, model='additive', period=52)
+# fig = res.plot()
+# fig.set_figheight(8)
+# fig.set_figwidth(15)
+# pyplot.show()
+
+Y = dataset.loc[:, ['date', 'PRADA_pred']]
+Y['date'] = pd.to_datetime(Y['date'])
+Y = Y.set_index('date')
+X['date'] = pd.to_datetime(X['date'])
+X = X.set_index('date')
+X = X.dropna()
+X = X.drop(columns=['EmperorWJ', 'ChowTaiFook', 'ChowSangSang', 'OrientalW', 'KingFook'])
+# Y = pd.merge(X['date'], Y, on='date', how='left')
+
+# # Feature Selection
+# from sklearn.feature_selection import SelectKBest
+# from sklearn.feature_selection import chi2, f_regression
+#
+# bestfeatures = SelectKBest(k=7, score_func=f_regression)
+# fit = bestfeatures.fit(X, Y)
+# dfscores = pd.DataFrame(fit.scores_)
+# dfcolumns = pd.DataFrame(X.columns)
+# featureScores = pd.concat([dfcolumns,dfscores],axis=1)
+# featureScores.columns = ['Specs','Score']  #naming the dataframe columns
+# featureScores.nlargest(10,'Score').set_index('Specs')  #print 10 best features
+# print(featureScores)
+
+models = []
+models.append(('LR', LinearRegression()))
+models.append(('LASSO', Lasso()))
+models.append(('EN', ElasticNet()))
+
+validation_size = 0.2
+
+train_size = int(len(X) * (1-validation_size))
+X_train, X_test = X[0:train_size], X[train_size:len(X)]
+Y_train, Y_test = Y[0:train_size], Y[train_size:len(X)]
+
+num_folds = 10
+scoring = 'neg_mean_squared_error'
+
+names = []
+kfold_results = []
+test_results = []
+train_results = []
+for name, model in models:
+    names.append(name)
+
+    ## K Fold analysis:
+    kfold = KFold(n_splits=num_folds)
+    # converted mean square error to positive. The lower the beter
+    cv_results = -1 * cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
+    kfold_results.append(cv_results)
+
+    # Full Training period
+    res = model.fit(X_train, Y_train)
+    train_result = mean_squared_error(res.predict(X_train), Y_train)
+    train_results.append(train_result)
+
+    # Test results
+    test_result = mean_squared_error(res.predict(X_test), Y_test)
+    test_results.append(test_result)
+
+    msg = "%s: %f (%f) %f %f" % (name, cv_results.mean(), cv_results.std(), train_result, test_result)
+    print(msg)
+
+X_train_ARIMA=X_train.loc[:, ['VHSI', 'HSI', 'LukFook', 'Hengdeli', 'ERNESTBOREL']]
+X_test_ARIMA=X_test.loc[:, ['VHSI', 'HSI', 'LukFook', 'Hengdeli', 'ERNESTBOREL']]
+tr_len = len(X_train_ARIMA)
+te_len = len(X_test_ARIMA)
+to_len = len (X)
+
+# ARIMA model
+modelARIMA = sm.tsa.arima.ARIMA(endog=Y_train, exog=X_train_ARIMA,order=[1,0,0])
+model_fit = modelARIMA.fit()
+
+error_Training_ARIMA = mean_squared_error(Y_train, model_fit.fittedvalues)
+predicted = model_fit.predict(start = tr_len -1 ,end = to_len -1, exog = X_test_ARIMA)[1:]
+error_Test_ARIMA = mean_squared_error(Y_test,predicted)
+
+# # add ARIMA Training and Test error into result and show it
+# train_results.append(error_Training_ARIMA)
+# test_results.append(error_Test_ARIMA)
+# names.append('ARIMA')
+#
+# # compare algorithms
+# fig = pyplot.figure()
+#
+# ind = np.arange(len(names))  # the x locations for the groups
+# width = 0.35  # the width of the bars
+#
+# fig.suptitle('Algorithm Comparison')
+# ax = fig.add_subplot(111)
+# pyplot.bar(ind - width/2, train_results,  width=width, label='Train Error')
+# pyplot.bar(ind + width/2, test_results, width=width, label='Test Error')
+# fig.set_size_inches(15,8)
+# pyplot.legend()
+# ax.set_xticks(ind)
+# ax.set_xticklabels(names)
+# pyplot.show()
