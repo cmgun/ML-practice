@@ -1,9 +1,6 @@
 from math import log
 import operator
 
-import pandas as pd
-
-
 def cal_shannon_ent(data_set):
     """
     calculate shannon entropy
@@ -13,7 +10,7 @@ def cal_shannon_ent(data_set):
     num_entries = len(data_set)
     label_counts = {}
     # calculate the different label number, last column is the label
-    for index, featVec in data_set.iterrows():
+    for featVec in data_set:
         current_label = featVec[-1]
         if current_label not in label_counts.keys():
             label_counts[current_label] = 0
@@ -33,25 +30,25 @@ def split_data_set(data_set, axis, value):
     :param value: feature value
     :return: dataset without target axis and value
     """
-    ret_data_set = pd.DataFrame()
-    for index, featVec in data_set.iterrows():
+    ret_data_set = []
+    for featVec in data_set:
         # row data
         if featVec[axis] == value:
             # chop out axis used for splitting
             reduced_feat_vec = featVec[:axis]
-            reduced_feat_vec = reduced_feat_vec.append(featVec[axis+1:])
-            ret_data_set = ret_data_set.append(reduced_feat_vec, ignore_index=True)
+            reduced_feat_vec.extend(featVec[axis+1:])
+            ret_data_set.append(reduced_feat_vec)
     return ret_data_set
 
 
-def feature_selection(data_set, labels):
+def feature_selection(data_set):
     """
     feature selection based on maximize entropy
     :param data_set:
     :return: best feature axis
     """
     # the last column is used for the labels
-    num_features = len(labels) - 1
+    num_features = len(data_set[0]) - 1
     # base info
     base_entropy = cal_shannon_ent(data_set)
     best_info_gain = 0.0
@@ -59,7 +56,7 @@ def feature_selection(data_set, labels):
     # iterate over all the features
     for i in range(num_features):
         # create a list of all the examples of this feature
-        feat_list = data_set.iloc[:, i]
+        feat_list = [example[i] for example in data_set]
         # feature unique value
         unique_vals = set(feat_list)
         new_entropy = 0.0
@@ -102,26 +99,25 @@ def create_tree(data_set, labels):
     :return:
     """
     # get y label
-    class_list = data_set.iloc[:, -1]
-    class_counts = class_list.value_counts()
-    if class_counts[0] == len(class_list):
+    class_list = [data[-1] for data in data_set]
+    if class_list.count(class_list[0]) == len(class_list):
         # stop splitting when all classes are equal
         return class_list[0]
     # stop splitting when there are no more features in dataSet
-    if len(labels) == 1:
+    if len(data_set[0]) == 1:
         return majority_count(class_list)
-    best_feat = feature_selection(data_set, labels)
+    best_feat = feature_selection(data_set)
     best_feat_label = labels[best_feat]
     tree = {best_feat_label: {}}
     del(labels[best_feat])
-    feat_values = data_set.iloc[:, best_feat]
-    # feat_values = [row[best_feat] for row in data_set]
+    feat_values = [data[best_feat] for data in data_set]
     unique_vals = set(feat_values)
     # print(uniqueVals)
     for value in unique_vals:
         # copy all labels, so trees don't mess up existing labels
         sub_labels = labels[:]
-        tree[best_feat_label][value] = create_tree(split_data_set(data_set, best_feat, value), sub_labels)
+        sub_data_set = split_data_set(data_set, best_feat, value)
+        tree[best_feat_label][value] = create_tree(sub_data_set, sub_labels)
     return tree
 
 
@@ -133,7 +129,7 @@ def classify(input_tree, feat_labels, test_vec):
     :param test_vec: test data
     :return: predict labels
     """
-    first_str = input_tree.keys()[0]
+    first_str = next(iter(input_tree))
     second_dict = input_tree[first_str]
     feat_index = feat_labels.index(first_str)
     key = test_vec[feat_index]
